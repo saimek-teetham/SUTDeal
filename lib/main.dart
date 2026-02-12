@@ -11,11 +11,11 @@ enum ProductStatus { active, reserved, sold }
 
 class Product {
   final int id;
-  final String title;
-  final double price;
-  final String category;
-  final String subcategory;
-  final String description;
+  String title; // Changed to non-final to allow editing
+  double price; // Changed to non-final
+  String category; // Changed to non-final
+  String subcategory; // Changed to non-final
+  String description; // Changed to non-final
   final String seller;
   final bool isMine;
   ProductStatus status;
@@ -104,7 +104,7 @@ class _MyHomePageState extends State<MyHomePage> {
   
   // --- Filter State ---
   String _selectedCategory = 'All'; 
-  String _selectedSubcategory = 'All'; // NEW: Subcategory Filter State
+  String _selectedSubcategory = 'All';
   String _searchQuery = '';
   
   final TextEditingController _searchController = TextEditingController();
@@ -219,7 +219,6 @@ class _MyHomePageState extends State<MyHomePage> {
     final priceController = TextEditingController();
     final descController = TextEditingController();
     
-    // Default selections
     String selectedCat = _categoryMap.keys.first;
     String selectedSub = _categoryMap[selectedCat]!.first;
 
@@ -244,7 +243,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Main Category Dropdown
                   InputDecorator(
                     decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
                     child: DropdownButtonHideUnderline(
@@ -258,7 +256,6 @@ class _MyHomePageState extends State<MyHomePage> {
                         onChanged: (val) {
                           setDialogState(() {
                             selectedCat = val!;
-                            // Reset subcategory when main category changes
                             selectedSub = _categoryMap[selectedCat]!.first;
                           });
                         },
@@ -268,7 +265,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   
                   const SizedBox(height: 16),
 
-                  // Subcategory Dropdown (Dependent)
                   InputDecorator(
                     decoration: const InputDecoration(labelText: 'Subcategory', border: OutlineInputBorder()),
                     child: DropdownButtonHideUnderline(
@@ -319,6 +315,122 @@ class _MyHomePageState extends State<MyHomePage> {
                   }
                 },
                 child: const Text('Post Item'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // --- NEW: Edit Product Dialog ---
+  void _showEditItemDialog(Product product) {
+    final titleController = TextEditingController(text: product.title);
+    final priceController = TextEditingController(text: product.price.toString());
+    final descController = TextEditingController(text: product.description);
+    
+    String selectedCat = product.category;
+    String selectedSub = product.subcategory;
+
+    // Safety check: if category doesn't exist in map (legacy data), default to first
+    if (!_categoryMap.containsKey(selectedCat)) {
+      selectedCat = _categoryMap.keys.first;
+      selectedSub = _categoryMap[selectedCat]!.first;
+    } else if (!_categoryMap[selectedCat]!.contains(selectedSub)) {
+      selectedSub = _categoryMap[selectedCat]!.first;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Edit Item'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Item Title'),
+                  ),
+                  TextField(
+                    controller: priceController,
+                    decoration: const InputDecoration(labelText: 'Price (SGD)'),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Main Category
+                  InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedCat,
+                        isDense: true,
+                        isExpanded: true,
+                        items: _categoryMap.keys.map((c) {
+                          return DropdownMenuItem(value: c, child: Text(c));
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            selectedCat = val!;
+                            selectedSub = _categoryMap[selectedCat]!.first;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+
+                  // Subcategory
+                  InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Subcategory', border: OutlineInputBorder()),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedSub,
+                        isDense: true,
+                        isExpanded: true,
+                        items: _categoryMap[selectedCat]!.map((s) {
+                          return DropdownMenuItem(value: s, child: Text(s));
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            selectedSub = val!;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+
+                  TextField(
+                    controller: descController,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () {
+                  if (titleController.text.isNotEmpty && priceController.text.isNotEmpty) {
+                    setState(() {
+                      product.title = titleController.text;
+                      product.price = double.tryParse(priceController.text) ?? 0.0;
+                      product.category = selectedCat;
+                      product.subcategory = selectedSub;
+                      product.description = descController.text;
+                    });
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Item updated successfully!')),
+                    );
+                  }
+                },
+                child: const Text('Save Changes'),
               ),
             ],
           );
@@ -431,14 +543,9 @@ class _MyHomePageState extends State<MyHomePage> {
   // --- Views ---
 
   Widget _buildBrowseView() {
-    // 1. FILTER LOGIC
     final filteredProducts = _products.where((p) {
-      // Main Category Check
       final matchesCategory = _selectedCategory == 'All' || p.category == _selectedCategory;
-      
-      // Subcategory Check (NEW)
       final matchesSubcategory = _selectedSubcategory == 'All' || p.subcategory == _selectedSubcategory;
-
       final isNotSold = p.status != ProductStatus.sold;
       final searchLower = _searchQuery.toLowerCase();
       final matchesSearch = p.title.toLowerCase().contains(searchLower) || 
@@ -450,7 +557,6 @@ class _MyHomePageState extends State<MyHomePage> {
     final int crossAxisCount = _calculateCrossAxisCount(context);
     final List<String> filterCategories = ['All', ..._categoryMap.keys];
 
-    // Get subcategories for currently selected main category
     List<String> currentSubcategories = [];
     if (_selectedCategory != 'All' && _categoryMap.containsKey(_selectedCategory)) {
       currentSubcategories = ['All', ..._categoryMap[_selectedCategory]!];
@@ -458,7 +564,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
     return Column(
       children: [
-        // Search Bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: TextField(
@@ -491,7 +596,6 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
 
-        // 2. MAIN CATEGORY FILTER
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -506,7 +610,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   onSelected: (bool selected) {
                     setState(() {
                       _selectedCategory = cat;
-                      _selectedSubcategory = 'All'; // Reset subcategory when main changes
+                      _selectedSubcategory = 'All'; 
                     });
                   },
                   selectedColor: Theme.of(context).colorScheme.primary,
@@ -519,10 +623,9 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
 
-        // 3. SUB-CATEGORY FILTER (Only visible if a Main Category is selected)
         if (currentSubcategories.isNotEmpty)
           Container(
-            color: Colors.grey.withValues(alpha: 0.1), // Slight background to distinguish
+            color: Colors.grey.withValues(alpha: 0.1),
             width: double.infinity,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -535,14 +638,13 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: ChoiceChip(
                       label: Text(sub),
                       selected: isSelected,
-                      // Smaller size for subcategories
                       visualDensity: VisualDensity.compact,
                       onSelected: (bool selected) {
                         setState(() {
                           _selectedSubcategory = sub;
                         });
                       },
-                      selectedColor: Theme.of(context).colorScheme.secondary, // Different color
+                      selectedColor: Theme.of(context).colorScheme.secondary,
                       labelStyle: TextStyle(
                         color: isSelected ? Colors.white : Colors.black87,
                         fontSize: 12,
@@ -557,7 +659,6 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
         
-        // Grid
         Expanded(
           child: filteredProducts.isEmpty 
           ? const Center(
@@ -724,6 +825,8 @@ class _MyHomePageState extends State<MyHomePage> {
                         onSelected: (value) {
                           if (value == 'delete') {
                             _deleteProduct(product.id);
+                          } else if (value == 'edit') {
+                            _showEditItemDialog(product);
                           } else if (value == 'reserved') {
                             _updateProductStatus(product.id, ProductStatus.reserved);
                           } else if (value == 'active') {
@@ -733,6 +836,12 @@ class _MyHomePageState extends State<MyHomePage> {
                           }
                         },
                         itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                          // NEW: Edit Option
+                          if (product.status != ProductStatus.sold)
+                            const PopupMenuItem<String>(
+                              value: 'edit',
+                              child: Text('Edit Listing'),
+                            ),
                           if (product.status != ProductStatus.sold)
                             PopupMenuItem<String>(
                               value: product.status == ProductStatus.reserved ? 'active' : 'reserved',
